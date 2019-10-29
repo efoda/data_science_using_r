@@ -1,0 +1,177 @@
+---
+title: "Engy Fouda Homework 4"
+output:
+  html_document: default
+  word_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(ggplot2)
+```
+
+# Problem: estimating multiple regression error rate by resampling (60 points)
+
+This week assignment closely follows what is explained in the preface above, except that instead of using simulated dataset, you are expected to use dataset on CPU performance (from the 80s) available at UCI ML data archive (https://archive.ics.uci.edu/ml/datasets/Computer+Hardware) as well as on this course website in canvas (file `machine.data` there).  It is probably the best to download and use local copy on your computer.
+
+The first two columns -- vendor and model names -- are irrelevant for the regression task. The continuous (this is regression problem) outcome that we will model is PRP.  One of the continuous attributes in the dataset -- ERP, very highly correlated with PRP -- is a result of modeling PRP by the dataset contributors and has to be discarded as well.  In the end you should be working with a dataset with seven continuous attributes -- one outcome, PRP and six predictors (MYCT, MMIN, MMAX, CACH, CHMIN and CHMAX to use data contributors' notation).  Due to non-linearity affecting multiple attributes in this dataset, you are better off working with log transformed *both* predictors and the outcome -- because several values in this dataset are zeroes and to avoid dealing with NaNs just add prior to log-transform "1"" to all values in this dataset (e.g. `cpuDat <- log(cpuDat+1)`).
+
+```{r}
+mcData<-read.table("C:/Users/Engy/Downloads/Harvard/7th semester ISA/R/Week 4/machine.data",sep=",");
+colnames(mcData)<-c("vendor","Model","MYCT","MMIN","MMAX","CACH","CHMIN","CHMAX","PRP","ERP")
+
+```
+
+
+## Sub-problem 1: read in the dataset and provide numerical and graphical summaries (10 points)
+
+Use methods such as `summary` and `pairs` that have been used in the previous assigments.  Comment on the extent of the signal available in the data for modeling PRP. Rearrange columns in the dataset in the decreasing order of absolute values of their correlation with the outcome (PRP).  So that PRP is the first column, the next one is the predictor that is most (positively or negatively) correlated with it, and so on.  You may find it convenient to use R function `order` for that.
+
+```{r}
+#pairs(mcData[,2:10])
+ERP<-mcData$ERP
+PRP.orginal<-mcData$PRP
+#mcData<-mcData[3:9]
+summary(mcData[3:9])
+pairs(mcData[3:9])
+logmcDat<-log(mcData[3:9]+1)
+summary(logmcDat)
+pairs(logmcDat)
+cor(logmcDat,use="complete.obs")
+cor(logmcDat,use="complete.obs", method = "pearson")
+cor(logmcDat,use="complete.obs", method = "spearman")
+
+orderlogmcDat<-logmcDat[,c(7,order(-abs(cor(logmcDat[,1:6],logmcDat$PRP,use="complete.obs"))))]
+```
+
+There are some outliers: about four points.  
+The MMAX has the highest correlation to PRP.  
+
+  
+## Sub-problem 2: add quadratic terms to the dataset (10 points)
+
+Use the code presented in the preface as a template to develop your own procedure for adding to the computer hardware dataset containing outcome (PRP) and all continuous predictors (MYCT through CHMAX) all pairwise products of continuous predictors (e.g. MYCT x MYCT, MYCT x MMIN, ..., CHMAX x CHMAX).  The data used here has to be the one from computer hardware dataset, _not_ simulated from normal distribution.  In the end your dataset should have 28 columns: PRP, 6 predictors and 6*7/2=21 of their pairwise combinations.
+
+```{r}
+inpYidx=1:2
+inpSDerr=0.5
+x2Tmp <- NULL
+  tmpCnms <- NULL
+  # for each linear term:
+  for ( iTmp in 2:dim(orderlogmcDat)[2] ) {
+    # multiply it by itself and all other terms,
+    # excluding already generated pairwise combinations: 
+    for ( jTmp in iTmp:dim(orderlogmcDat)[2] ) {
+      x2Tmp <- cbind(x2Tmp,orderlogmcDat[,iTmp]*orderlogmcDat[,jTmp])
+      # maintain vector of column names for quadratic
+      # terms along the way:
+      tmpCnms <- c(tmpCnms,paste0(colnames(orderlogmcDat[iTmp]),".",colnames(orderlogmcDat[jTmp])))
+    }
+  }
+  # name attributes in the matrix of quadratic terms:
+  colnames(x2Tmp) <- tmpCnms
+  # create outcome as a sum of an unweighted average of 
+  # specified columns and controlled amount 
+  # of gaussian noise:
+  yTmp <- rowMeans(cbind(orderlogmcDat,x2Tmp)[,inpYidx])
+  # return data.frame with outcome as a first column,
+  # followed by linear, then by quadratic terms:
+  #SimDat<-data.frame(Y=yTmp,orderlogmcDat,x2Tmp)
+simDat<-data.frame(orderlogmcDat,x2Tmp)
+dim(simDat)
+```
+
+Here SimDat has 28 columns as required.  
+
+## Sub-problem 3: fit multiple regression models on the entire dataset (10 points)
+
+As illustrated in the preface above, starting from the first, most correlated with PRP, predictor, fit linear models with one, two, ..., all 27 linear and quadratic terms on the entire dataset and calculate resulting (training) error for each of the models. Plot error as a function of the number of predictors in the model (similar to the plot in the preface that shows just the training error on the entire dataset).  Because the underlying data is different the plot you obtain here for computer hardware dataset will be different from that shown in the preface.  Please comment on this difference.
+
+```{r}
+df2plot <- NULL
+for ( iTmp in 2:dim(simDat)[2] ) {
+  lmTmp <- lm(PRP~.,simDat[,1:iTmp])
+  errTmp <- sqrt(mean((simDat[,"PRP"]-predict(lmTmp))^2))
+  df2plot <- rbind(df2plot,data.frame(nvars=iTmp-1,err=errTmp))
+}
+plot(df2plot,xlab="Number of variables",ylab="Regression error",main=paste(dim(simDat)[1],"observations"))
+
+```
+  
+The number of obvervations in the preface are 200, here they are 209  
+The regression error in the preface ranged from 0.85 to higher than 1.05, where it varies from less than 0.35 to higher than 0.6  
+The distribution and the scatter of the points here differs in distribution from that of the preface. However, the relationship is still almost the same as the number of variables increase, the regression error decreases.  
+
+
+## Sub-problem 4: develop function performing bootstrap on computer hardware dataset (15 points)
+
+Modify function `bootTrainTestErrOneAllVars` defined in the preface to perform similar kind of analysis on the computer hardware dataset.  Alternatively, you can determine what modifications are necessary to the computer hardware dataset, so that it can be used as input to `bootTrainTestErrOneAllVars`.
+```{r}
+bootTrainTestErrOneAllVars <- function(inpDat,nBoot=100) {
+  # matrices and vector to store bootstrap training
+  # and test errors as well as training error for model
+  # fit on all observations -- for one through all
+  # variables in the dataset:
+  errTrain <- matrix(NA,nrow=nBoot,ncol=dim(inpDat)[2]-1)
+  errTest <- matrix(NA,nrow=nBoot,ncol=dim(inpDat)[2]-1)
+  allTrainErr <- numeric()
+  # first predictor is the second column in
+  # the input data - first is the outcome "PRP":
+  for ( iTmp in 2:dim(inpDat)[2] ) {
+    # fit model and calculate error on all observations:
+    lmTmp <- lm(PRP~.,inpDat[,1:iTmp])
+    allTrainErr[iTmp-1] <- sqrt(mean((inpDat[,"PRP"]-predict(lmTmp))^2))
+    # draw repeated boostraps of the data:
+    for ( iBoot in 1:nBoot ) {
+      # replace=TRUE is critical for bootstrap to work correctly:
+      tmpBootIdx <- sample(dim(inpDat)[1],dim(inpDat)[1],replace=TRUE)
+      # model fit on the bootstrap sample and
+      # corresponding training error:
+      lmTmpBoot <- lm(PRP~.,inpDat[tmpBootIdx,1:iTmp])
+      errTrain[iBoot,iTmp-1] <- sqrt(mean((inpDat[tmpBootIdx,"PRP"]-predict(lmTmpBoot))^2))
+      # test error is calculated on the observations
+      # =not= in the bootstrap sample - thus "-tmpBootIdx"
+      errTest[iBoot,iTmp-1] <- sqrt(mean((inpDat[-tmpBootIdx,"PRP"]-predict(lmTmpBoot,newdata=inpDat[-tmpBootIdx,1:iTmp]))^2))
+    }
+  }
+  # return results as different slots in the list:
+  list(bootTrain=errTrain,bootTest=errTest,allTrain=allTrainErr)
+}
+
+
+# wrapper for plotting:
+plotBootRegrErrRes <- function(inpRes,inpPchClr=c(1,2,4),mainTxt="") {
+  matplot(1:length(inpRes$allTrain),cbind(inpRes$allTrain,colMeans(inpRes$bootTrain),colMeans(inpRes$bootTest)),pch=inpPchClr,col=inpPchClr,lty=1,type="b",xlab="Number of predictors",ylab="Regression error",main=mainTxt)
+  legend("topright",c("train all","train boot","test boot"),col=inpPchClr,text.col=inpPchClr,pch=inpPchClr,lty=1)
+}
+
+
+```
+
+## Sub-problem 5: use bootstrap to estimate training and test error on computer hardware dataset (15 points)
+
+Use function developed above to estimate training and test error in modeling PRP on the computer hardware dataset.  Plot and discuss the results.  Compare model error over the range of model complexity to that obtained by the dataset contributors (as a difference between ERP and PRP in the original full dataset once the log-transform performed before proceeding with modeling here has been accounted for -- by either calculating error on log-transform of PRP and ERP or transforming our model predictions back to the original scale of PRP measurements)
+```{r}
+bootErrRes <- bootTrainTestErrOneAllVars(simDat,30)
+plotBootRegrErrRes(bootErrRes,mainTxt="209 observations")
+
+#ERP
+error.ERP=sqrt(mean((log(ERP+1) - simDat$PRP)^2))
+#error.ERP=sqrt(mean((log(ERP+1) - log(mcData$PRP+1))^2))
+abline(error.ERP,0)
+#error.ERP1=sqrt(mean((ERP - PRP.orginal)^2))/100
+
+```
+
+By drawing the author's error as a straight line, the train-all model is the best model as it results the smallest regression error.  
+
+```{r}
+old.par <- par(mfrow=c(1,3))
+for ( tmpNobs in c(200,500,1000) ) {
+  bootErrRes <- bootTrainTestErrOneAllVars(simDat,30)
+  plotBootRegrErrRes(bootErrRes,mainTxt=paste(tmpNobs,"observations"))
+}
+```
+
+
+

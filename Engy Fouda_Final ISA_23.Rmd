@@ -1,0 +1,905 @@
+---
+title: 'Engy Fouda Final Exam'
+output:
+  html_document:
+    toc: true
+---
+
+```{r setup, include=FALSE}
+library(ISLR)
+library(leaps)
+library(ggplot2)
+library(glmnet)
+library(plotmo)
+library(MASS)
+library(class)
+library(reshape2)
+library(ROCR)
+library(e1071)
+library(GGally)
+library(randomForest)
+library(car)
+library(plyr)
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Preface
+
+For the final exam/project we will develop classification models using several approaches and compare their performance on a new dataset -- so-called "Census Income" from UCI ML.  It is available at UCI ML web site, but so that we are not at the mercy of UCI ML availability, there is also a local copy of it in our website in Canvas as a zip-archive of all associated files.  Among other things, the description for this dataset also presents performance (prediction accuracy) observed by the dataset providers using variety of modeling techniques -- this supplies a context for the errors of the models we will develop here.
+
+Please note that the original data has been split up into training and test subsets, but there doesn't seem to be anything particular about that split, so we might want to pool those two datasets together and split them into training and test as necessary ourselves. As you do that, please check that the attribute levels are consistent between those two files.  For instance, the categorized income levels are indicated using slightly different notation in their training and test data.   By now it should be quite straightforward for you to correct that when you pool them together.
+
+```{r}
+mcData.old<-read.table("C:/Users/Engy/Downloads/Harvard/7th semester ISA/R/week 14 final ISA/CensusIncome/adult.data",sep=",");
+colnames(mcData.old)<-c("age","workclass","fnlwgt","education","eduNum","maritalStatus","occupation","relationship","race","sex","capitalGain","capitalLoss","hrsPerWeek","nativeCountry","income")
+mcData1<-read.table("C:/Users/Engy/Downloads/Harvard/7th semester ISA/R/week 14 final ISA/CensusIncome/adult.test",sep=",");
+colnames(mcData1)<-c("age","workclass","fnlwgt","education","eduNum","maritalStatus","occupation","relationship","race","sex","capitalGain","capitalLoss","hrsPerWeek","nativeCountry","income")
+
+```
+
+```{r}
+summary(mcData.old)
+```
+
+
+```{r}
+summary(mcData1)
+```
+
+I cleaned the data in the income notation in the text file before reading it to R; hence, both dataframes are consistant now.  
+moreover, I deleted the first few character that were before the age column and caused the file to not be able to be read.  
+The new data file will be uploaded with the rmd and html files.  
+Thanks for your understanding!  
+
+```{r}
+mcData<-rbind(mcData.old,mcData1)
+```
+
+
+Also, please note that there is non-negligible number of rows with missing values that for most analyses cannot be included without modification in the computation.  Please decide how you want to handle them and proceed accordingly.  The simplest and perfectly acceptable approach would be to exclude those observations from the rest of the analyses, but if you have time and inclination to investigate the impact of imputing them by various means, you are welcome to try.
+
+```{r}
+#old.nrow=nrow(mcData)
+mcData[mcData==' ?'] <- NA
+table(is.na(mcData))
+mcData[mcData=='?'] <- NA
+table(is.na(mcData))
+mcData <- na.omit(mcData)
+table(is.na(mcData))
+```
+
+Attribute called "final weight" in the dataset description represents demographic weighting of these observations.  Please disregard it for the purposes of this assignment.
+
+```{r}
+mcData <- subset( mcData, select = -fnlwgt )
+summary(mcData)
+```
+
+
+Additionally, several attributes in this dataset are categorical variables with more than two levels (e.g. native country, occupation, etc.).  Please make sure to translate them into corresponding sets of dummy indicator variables for the methods that require such conversion (e.g. PCA) -- R function `model.matrix` can be convenient for this, instead of generating those 0/1 indicators for each level of the factor manually (which is still perfectly fine).  Some of those multi-level factors contain very sparsely populated categories -- e.g. occupation "Armed-Forces" or work class "Never-worked" -- it is your call whether you want to keep those observations in the data or exclude also on the basis that there is not enough data to adequately capture the impact of those categories. Feel free to experiment away!
+
+```{r}
+mcData$occupation<-factor(mcData$occupation)
+mcData$workclass<-factor(mcData$workclass)
+mcData$nativeCountry<-factor(mcData$nativeCountry)
+```
+
+#There are 9 factor columns
+#1.occupation
+```{r}
+summary(mcData$occupation)
+
+```
+
+Armed-Forces has 14 rows only.
+I'll delete any level whose no. of rows is less than 100 to decrease the size of the dummy variables matrix.  
+
+```{r}
+#to delete the sparsely populated categories in occupation column
+mcData <- mcData[!(as.numeric(mcData$occupation) %in% which(table(mcData$occupation)<100)),]
+#delete levels from dataframe whose rows=0 before processing the dummy variables
+mcData$occupation<- factor(mcData$occupation)
+#gerenate the dummy variables of occupation category with deleting the intercept
+m1=model.matrix(~occupation-1, data=mcData)
+#to delete the ? column
+#m1=m1[,-1]
+```
+
+
+```{r}
+mcDataPCA=cbind(mcData, data.frame(m1))
+mcDataPCA <- subset( mcDataPCA, select = -occupation )
+```
+
+#2.nativeCountry
+
+Among the multi-level categorical attributes, native country attribute has the largest number of levels -- several folds higher than any other attribute in this dataset -- some of which have relatively few observations.  This associated increase in dimensionality of the data may not be accompanied by a corresponding gain of resolution -- e.g. would we expect this data to support the *difference* in income between descendants from Peru and Nicaragua, for example, or from Cambodia and Laos?  Please feel free to evaluate the impact of inclusion and/or omission of this attribute in/from the model and/or discretizing it differently (e.g. US/non-US, etc.).
+
+```{r}
+summary(mcDataPCA$nativeCountry)
+
+```
+
+Yes, the no. of rows for United States are 41292, while all the other countries are less than 200 rows. I think making it as US/non-US is the best from my point of view as I did not do any correlations yet; hence, I  am not sure hat to omit yet.  
+
+```{r}
+mcData <- transform(mcData, nativeCountry = ifelse(nativeCountry != " United-States", "NonUS","US"))
+mcData$nativeCountry<- factor(mcData$nativeCountry)
+```
+
+```{r}
+mcDataPCA <- transform(mcDataPCA, nativeCountry = ifelse(nativeCountry != " United-States", "NonUS","US"))
+```
+
+```{r}
+#delete levels from dataframe whose rows=0 before processing the dummy variables
+mcDataPCA$nativeCountry<- factor(mcDataPCA$nativeCountry)
+#gerenate the dummy variables of occupation category with deleting the intercept
+m1=model.matrix(~nativeCountry-1, data=mcDataPCA)
+
+```
+
+```{r}
+mcDataPCA=cbind(mcDataPCA, data.frame(m1))
+mcDataPCA <- subset( mcDataPCA, select = -nativeCountry )
+```
+
+#3.Workclass
+
+```{r}
+summary(mcDataPCA$workclass)
+
+```
+
+The no. of rows for > and Never-worled =0, and Without-pay=21 while all the other workclasses are more than 1000 rows. I'll delete any level whose no. of rows is less than 100 to decrease the size of the dummy variables matrix.  
+
+```{r}
+#to delete the sparsely populated categories in workclass column
+mcDataPCA <- mcDataPCA[!(as.numeric(mcDataPCA$workclass) %in% which(table(mcData$workclass)<100)),]
+```
+
+```{r}
+#delete levels from dataframe whose rows=0 before processing the dummy variables
+mcDataPCA$workclass<- factor(mcDataPCA$workclass)
+#gerenate the dummy variables of occupation category with deleting the intercept
+m1=model.matrix(~workclass-1, data=mcDataPCA)
+
+```
+
+```{r}
+mcDataPCA=cbind(mcDataPCA, data.frame(m1))
+mcDataPCA <- subset( mcDataPCA, select = -workclass )
+```
+
+#4.income
+```{r}
+m1=model.matrix(~income-1, data=mcDataPCA)
+colnames(m1)<-c("lesseq50","more50")
+```
+
+```{r}
+mcDataPCA=cbind(mcDataPCA, data.frame(m1))
+mcDataPCA <- subset( mcDataPCA, select = -income )
+```
+
+#5.education
+
+```{r}
+summary(mcDataPCA$education)
+```
+
+The smallest category is preschool of 72 rows.  Will delete them as they have enothing to dowith income as well. Defintely, these preschoolers don't work.  
+
+```{r}
+#to delete the sparsely populated categories in workclass column
+mcDataPCA <- mcDataPCA[!(as.numeric(mcDataPCA$education) %in% which(table(mcData$education)<100)),]
+```
+
+```{r}
+#delete levels from dataframe whose rows=0 before processing the dummy variables
+mcDataPCA$education<- factor(mcDataPCA$education)
+#gerenate the dummy variables of occupation category with deleting the intercept
+m1=model.matrix(~education-1, data=mcDataPCA)
+
+```
+
+```{r}
+mcDataPCA=cbind(mcDataPCA, data.frame(m1))
+mcDataPCA <- subset( mcDataPCA, select = -education )
+```
+
+#6.sex
+```{r}
+m1=model.matrix(~sex-1, data=mcDataPCA)
+```
+
+```{r}
+mcDataPCA=cbind(mcDataPCA, data.frame(m1))
+mcDataPCA <- subset( mcDataPCA, select = -sex )
+```
+
+#7.race
+
+```{r}
+summary(mcDataPCA$race)
+```
+
+I can't eliminate any of these races as they all have rows more than 100
+
+```{r}
+m1=model.matrix(~race-1, data=mcDataPCA)
+```
+
+```{r}
+mcDataPCA=cbind(mcDataPCA, data.frame(m1))
+mcDataPCA <- subset( mcDataPCA, select = -race )
+```
+
+#8.maritalStatus
+
+```{r}
+summary(mcDataPCA$maritalStatus)
+```
+
+Will delete Married-AF-spouse as it has only 32 rows.
+
+```{r}
+#to delete the sparsely populated categories in workclass column
+mcDataPCA <- mcDataPCA[!(as.numeric(mcDataPCA$maritalStatus) %in% which(table(mcData$maritalStatus)<100)),]
+#delete levels from dataframe whose rows=0 before processing the dummy variables
+mcDataPCA$maritalStatus<- factor(mcDataPCA$maritalStatus)
+m1=model.matrix(~maritalStatus-1, data=mcDataPCA)
+```
+
+```{r}
+mcDataPCA=cbind(mcDataPCA, data.frame(m1))
+mcDataPCA <- subset( mcDataPCA, select = -maritalStatus )
+```
+
+#9.relationship
+Finally, the last factor column
+
+```{r}
+summary(mcDataPCA$relationship)
+```
+I won't eliminate any of these relationships as they all have rows more than 100.  
+
+```{r}
+m1=model.matrix(~relationship-1, data=mcDataPCA)
+```
+
+```{r}
+mcDataPCA=cbind(mcDataPCA, data.frame(m1))
+mcDataPCA <- subset( mcDataPCA, select = -relationship )
+```
+
+Lastly, the size of this dataset can make some of the modeling techniques run slower than what we were typically encountering in this class.  You may find it helpful to do some of the exploration and model tuning on multiple random samples of smaller size as you decide on useful ranges of parameters/modeling choices, and then only perform a final run of fully debugged and working code on the full dataset.
+
+
+# Problem 1: univariate and unsupervised analysis (20 points)
+
+Download and read "Census Income" data into R and prepare graphical and numerical summaries of it: e.g. histograms of continuous attributes, contingency tables of categorical variables, scatterplots of continuous attributes with some of the categorical variables indicated by color/symbol shape, etc.  
+
+```{r samplmcData}
+# mcData<-mcData[sample(nrow(mcData),2000),]
+# mcDataPCA<-mcDataPCA[sample(nrow(mcDataPCA),2000),]
+```
+
+```{r}
+summary(mcData)
+grahdata <- subset( mcData, select = -education )
+grahdata <- subset( grahdata, select = -nativeCountry )
+ggpairs(grahdata,aes(colour=income))
+```
+
+
+
+```{r}
+hist(mcData$age)
+hist(mcData$eduNum)
+hist(mcData$capitalGain)
+hist(mcData$capitalLoss)
+hist(mcData$hrsPerWeek)         
+```
+
+
+```{r}
+table(mcData$workclass)
+table(mcData$education)
+table(mcData$maritalStatus)
+table(mcData$occupation)
+table(mcData$relationship)
+table(mcData$race)
+table(mcData$sex)
+table(mcData$nativeCountry)
+```
+
+```{r}
+
+cor(as.numeric(mcData$income),mcData$eduNum)
+cor(as.numeric(mcData$income),mcData$age)
+cor(as.numeric(mcData$income),mcData$hrsPerWeek)
+
+cor(as.numeric(mcData$income),mcData$capitalGain)
+
+cor(as.numeric(mcData$income),as.numeric(mcData$sex))
+cor(as.numeric(mcData$income),mcData$capitalLoss)
+
+cor(as.numeric(mcData$income),as.numeric(mcData$workclass))
+
+cor(as.numeric(mcData$income),as.numeric(mcData$education))
+cor(as.numeric(mcData$income),as.numeric(mcData$maritalStatus))
+cor(as.numeric(mcData$income),as.numeric(mcData$occupation))
+cor(as.numeric(mcData$income),as.numeric(mcData$relationship))
+cor(as.numeric(mcData$income),as.numeric(mcData$race))
+```
+
+The default correlations show that the income is correlated mostly to eduNum, then age, then hrsPerWeek, and CapitalGain more than the rest of the predictors.  
+However, all the predictors seem to be coorelated with the income as none of them has a correlation of zero.  
+
+
+```{r warning=FALSE}
+scatterplotMatrix(~age+eduNum+capitalGain+capitalLoss+hrsPerWeek|sex, data=mcData)
+ #plot(mcData$age,mcData$income)
+
+```
+
+
+
+```{r warning=FALSE}
+scatterplotMatrix(~age+eduNum+capitalGain+capitalLoss+hrsPerWeek|income, data=mcData)
+```
+
+```{r warning=FALSE}
+scatterplotMatrix(~age+eduNum+capitalGain+capitalLoss+hrsPerWeek|income, data=mcData)
+```
+
+```{r warning=FALSE}
+scatterplotMatrix(~age+eduNum+capitalGain+capitalLoss+hrsPerWeek|nativeCountry, data=mcData)
+```
+
+#Perform principal components analysis of this data 
+
+```{r}
+old.par <- par(mfrow=c(1,2),ps=16)
+plot(prcomp(mcDataPCA))
+biplot(prcomp(mcDataPCA))
+```
+
+```{r}
+sort(abs(prcomp(mcDataPCA)$rotation[,1]),decreasing=T)[1:5]
+```
+
+```{r}
+sort(abs(prcomp(mcDataPCA)$rotation[,2]),decreasing=T)[1:5]
+```
+
+
+```{r}
+signif(100*prcomp(mcDataPCA)$sdev[1:5]^2/sum(prcomp(mcDataPCA)$sdev^2),3)
+```                                                          
+
+#Do you need to scale it prior to that? 
+
+Yes, PCA nneds scaling for sure. As we saw from the variance vs. mean plots, capitalGain  and  capitalLoss explain by far the most of the variability in the untransformed data. As we can see from the numerical values of loadings the first two principal components more or less coincide with each of them respectively. 
+
+#Scaled Data
+
+```{r PCAScaled}
+# scaled data:
+old.par <- par(mfrow=c(1,2),ps=16)
+plot(prcomp(scale(mcDataPCA)))
+biplot(prcomp(scale(mcDataPCA)))
+```
+
+
+#how would you represent multilevel categorical attributes to be used as inputs for PCA?
+
+I represent multilevel categorical attributes as dumy variables to be used as inputs for PCA as mentioned above.
+
+#plot observations in the space of the first few principal components with subjects' gender and/or categorized income indicated by color/shape of the symbol. 
+
+```{r}
+par(old.par)
+rot=prcomp(scale(mcDataPCA))$rotation
+rownames(rot)=colnames(mcDataPCA)
+tmpSel<-prcomp(scale(mcDataPCA))$rotation[27:28,]
+plot(prcomp(scale(mcDataPCA))$x[,1:2])
+text(rot[,1]*10*1.2,rot[,2]*10*1.2,rownames(tmpSel),col="red",cex=0.7)
+text(rot[,1]*10*1.2,rot[,2]*10*1.2,rownames(rot[44:45,]),col="blue",cex=0.7)
+
+```
+
+# Perform univariate assessment of associations between outcome we will be modeling and each of the attributes (e.g. t-test or logistic regression for continuous attributes, contingency tables/Fisher exact test/$\chi^2$ test for categorical attributes).  
+
+```{r ttest}
+# incomeNum<-as.numeric(mcData$income)
+# mcData<-cbind(mcData,incomeNum)
+t.test(as.numeric(mcData$income)~sex,data=mcData)
+```
+
+
+```{r chiTest}
+ch=chisq.test(mcDataPCA)
+ch
+```
+
+```{r}
+glmRes <- glm(income~age+eduNum+capitalGain+capitalLoss+hrsPerWeek,data=mcData,family=binomial)
+summary(glmRes)
+sort(signif(glmRes$coefficients,3),decreasing = TRUE)
+```
+
+```{r}
+cc<-apply(as.matrix(mcDataPCA[1:10,]), 1, function(x)fisher.test(matrix(round(x), ncol=2), workspace=1e9)$p.value)
+cc
+```
+
+```{r}
+mean(cc)
+```
+
+#Summarize your observations from these assessments: does it appear that there is association between outcome and predictors? 
+
+All of the predictors are highly coorelated with the outcome in all the tests!  
+The p-values are  <2e-16 and the mean of the fisher test for a sample o the dataset is 3.954784e-06 
+
+#Which predictors seem to be more/less relevant?
+
+eduNum, age, hrsPerWeek, and CapitalGain seem the more relevant.  
+
+# Problem 2: logistic regression (25 points)
+
+#Develop logistic regression model of the outcome as a function of multiple predictors in the model.  
+
+```{r logreg}
+#mcData$income <- factor(mcData$income)
+glmRes <- glm(income~age+education+occupation+race+sex+capitalGain+hrsPerWeek+capitalLoss,data=mcData,family=binomial)
+summary(glmRes)
+sort(signif(glmRes$coefficients,3),decreasing = TRUE)
+```
+
+#Which variables are significantly associated with the outcome?  
+
+Warning "fitted probabilities numerically 0 or 1 occurred" issued by glm above indicates that some observations are so far from decision boundary, that their respective probabilities of belonging to one of the classes are (within numerical precision) equal to zero or one.
+
+age, hrsPerWeek,CapitalGain,CapitalLoss, sex Male, education HS-grad and up, plus some occupations are of p-value <2e-16; hence, significantly associated with income.  
+
+#Test model performance on multiple splits of data into training and test subsets, summarize it in terms of accuracy/error, sensitivity/specificity 
+
+```{r}
+glmPred <- predict(glmRes,type="response")>0.5
+summary(glmPred)
+table(mcData[,"income"],glmPred)
+```
+
+```{r}
+summPreds <- function(inpPred,inpTruth,inpMetrNms=c("err","acc","sens","spec")) {
+  retVals <- numeric()
+  for ( metrTmp in inpMetrNms ) {
+    retVals[metrTmp] <- performance(prediction(inpPred,inpTruth),measure=metrTmp)@y.values[[1]][2]
+  }
+  retVals
+}
+summPreds(as.numeric(1+glmPred),as.numeric(mcData[,"income"]))
+```
+
+
+```{r warning=FALSE}
+glmdfTmp=NULL
+for(iTry in 1:10){
+trainIdx<-sample(nrow(mcData),nrow(mcData),replace=TRUE)
+trainD=mcData[trainIdx,]
+testD=mcData[-trainIdx,]
+
+glmTrain<-glm(income~age+education+occupation+race+sex+capitalGain+hrsPerWeek+capitalLoss,data=trainD,family=binomial)
+
+#rfTestPred<-predict(rfTrain,newdata=testD,type="response")>0.5
+glmTestPred<-predict(glmTrain,newdata=testD)
+
+glmtmpVals<-summPreds(as.numeric(glmTestPred),as.numeric(mcData[-trainIdx,"income"]))
+
+glmdfTmp<-rbind(glmdfTmp,glmtmpVals)
+}
+glmdfTmp<-data.frame(glmdfTmp)
+glmdfTmp<-cbind(glmdfTmp,type="glm")
+print(mean(glmdfTmp$err))
+print(mean(glmdfTmp$acc))
+print(mean(glmdfTmp$sens))
+print(mean(glmdfTmp$spec))
+```
+
+```{r}
+ggplot(glmdfTmp,aes(x=glmdfTmp$type,y=glmdfTmp$err))+geom_boxplot()
+```
+
+
+
+Overall (training) error in this case (shown above) is about 18%. Sensitivity is about 47% and specificity is about 94%. 
+
+
+#Compare to the performance of other methods reported in the dataset description.
+Error Accuracy reported as follows, after removal of unknowns from
+| train/test sets):
+| C4.5 : 84.46+-0.30
+| Naive-Bayes: 83.88+-0.30
+| NBTree : 85.90+-0.28
+
+
+The mean accuracy of my linear regression model is 82.388% which is slightly less than the accuracies reported in the dataset description; however, comparable to them.  
+
+# Problem 3: random forest (25 points)
+
+#Develop random forest model of the categorized income. 
+
+
+```{r randomForest}
+tblTmp <- randomForest(income~.,mcData,importance=T)
+```
+
+```{r}
+tblTmp
+```
+
+#Present variable importance plots 
+```{r}
+varImpPlot(tblTmp,sort=T)
+```
+
+
+
+#Comment on relative importance of different attributes in the model.  
+From the plots above, capitalGain has perfect linear separation, and occupations, capitalLoss, and age has almost linear separation.
+
+
+#Did attributes showing up as more important in random forest model also appear as significantly associated with the outcome by logistic regression?  
+Yes, they appear in the logistic regression as significantly associated as well. 
+
+#Test model performance on multiple splits of data into training and test subsets, compare test and out-of-bag error estimates, summarize model performance in terms of accuracy/error, sensitivity/specificity 
+
+
+```{r}
+rfPred<-predict(tblTmp,newdata=mcData)
+```
+
+
+```{r}
+summPreds(as.numeric(rfPred),as.numeric(mcData[,"income"]))
+```
+
+
+```{r warning=FALSE}
+rfdfTmp=NULL
+for(iTry in 1:10){
+trainIdx<-sample(nrow(mcData),nrow(mcData),replace=TRUE)
+trainD=mcData[trainIdx,]
+testD=mcData[-trainIdx,]
+
+rfTrain<-randomForest(income~.,data=trainD,family=binomial)
+
+#rfTestPred<-predict(rfTrain,newdata=testD,type="response")>0.5
+rfTestPred<-predict(rfTrain,newdata=testD)
+
+rftmpVals<-summPreds(as.numeric(rfTestPred),as.numeric(mcData[-trainIdx,"income"]))
+
+rfdfTmp<-rbind(rfdfTmp,rftmpVals)
+}
+rfdfTmp<-data.frame(rfdfTmp)
+rfdfTmp<-cbind(rfdfTmp,type="RF")
+print(mean(rfdfTmp$err))
+print(mean(rfdfTmp$acc))
+print(mean(rfdfTmp$sens))
+print(mean(rfdfTmp$spec))
+```
+
+```{r}
+ggplot(rfdfTmp,aes(x=rfdfTmp$type,y=rfdfTmp$err))+geom_boxplot()
+```
+
+
+
+
+#Compare to the performance of other methods reported in the dataset description.
+Error Accuracy reported as follows, after removal of unknowns from
+| train/test sets):
+| C4.5 : 84.46+-0.30
+| Naive-Bayes: 83.88+-0.30
+| NBTree : 85.90+-0.28
+
+The mean accuracy of my model is 85.0516% which is slighlty higher than C4.5 and NB but slightly less than NBTree; hence, highly comparable to them.  
+
+
+
+# Problem 4: SVM (25 points)
+
+Develop SVM model of this data choosing parameters (e.g. choice of kernel, cost, etc.) that appear to yield better performance.  Test model performance on multiple splits of data into training and test subsets, summarize model performance in terms of accuracy/error, sensitivity/specificity and compare to the performance of other methods reported in the dataset description.
+
+```{r}
+#mcData<-mcDataBkup[sample(nrow(mcDataBkup),100),]
+```
+
+
+```{r}
+svm(income~.,data=mcData,kernel="linear",cost=10)
+```
+
+```{r}
+svm(income~.,data=mcData,kernel="linear",cost=100)
+```
+
+```{r}
+svm(income~.,data=mcData,kernel="linear",cost=1000)
+```
+
+```{r svmLinTune}
+summary(tune(svm,income~.,data=mcData,kernel="linear",ranges=list(cost=c(0.1,0.2,0.5,1,2,5,10,20,50,100))))
+```
+
+```{r}
+summary(tune(svm,income~.,data=mcData,kernel="linear",ranges=list(cost=1:10)))
+```
+
+Results from tune above suggest that the best model performance on the entire dataset is achieved when cost values around 3 are used.
+
+
+```{r warning=FALSE}
+svmdfTmp=NULL
+for(iTry in 1:10){
+trainIdx<-sample(nrow(mcDataPCA),nrow(mcDataPCA),replace=TRUE)
+trainD=mcDataPCA[trainIdx,]
+testD=mcDataPCA[-trainIdx,]
+
+svmTrain<-tune(svm,income~.,data=mcData[trainIdx,],kernel="linear",tunecontrol=tune.control(cross=5),ranges=list(cost=0.5*1.2^(0:21)))   ###1.2^(-1:16)))
+
+svmTestPred<-predict(svmTrain$best.model,newdata=mcData[-trainIdx,])
+
+svmtmpVals<-summPreds(as.numeric(svmTestPred),as.numeric(mcData[-trainIdx,"income"]))
+
+svmdfTmp<-rbind(svmdfTmp,svmtmpVals)
+}
+svmdfTmp<-data.frame(svmdfTmp)
+svmdfTmp<-cbind(svmdfTmp,type="svm")
+print(mean(svmdfTmp$err))
+print(mean(svmdfTmp$acc))
+print(mean(svmdfTmp$sens))
+print(mean(svmdfTmp$spec))
+```
+
+```{r}
+ggplot(svmdfTmp,aes(x=svmdfTmp$type,y=svmdfTmp$err))+geom_boxplot()
+```
+
+#Compare to the performance of other methods reported in the dataset description.
+Error Accuracy reported as follows, after removal of unknowns from
+| train/test sets):
+| C4.5 : 84.46+-0.30
+| Naive-Bayes: 83.88+-0.30
+| NBTree : 85.90+-0.28
+
+The mean accuracy of my model is 84.09295% which is within the range of the dataset description's performance  
+
+
+#radial
+
+```{r}
+#mcDataPCABkup<-mcDataPCA
+```
+
+```{r}
+#mcDataPCA<-mcDataPCABkup[sample(nrow(mcDataPCABkup),1000),]
+```
+
+```{r radialPlots}
+svm(mcDataPCA$more50~.,data=mcDataPCA[,-45],kernel="radial",cost=1,gamma=1)
+svm(mcDataPCA$more50~.,data=mcDataPCA[,-45],kernel="radial",cost=1,gamma=0.01)
+svm(mcDataPCA$more50~.,data=mcDataPCA[,-45],kernel="radial",cost=1,gamma=100)
+
+
+```
+
+
+```{r warning=FALSE}
+radialdfTmp=NULL
+for(iTry in 1:10){
+trainIdx<-sample(nrow(mcDataPCA),nrow(mcDataPCA),replace=TRUE)
+trainD=mcDataPCA[trainIdx,]
+testD=mcDataPCA[-trainIdx,]
+
+radialTrain<-tune(svm,more50~.,data=mcDataPCA[trainIdx,],kernel="radial",ranges=list(cost=c(1,2,5,10,20),gamma=c(0.01,0.02,0.05,0.1)))
+
+#rfTestPred<-predict(rfTrain,newdata=testD,type="response")>0.5
+radialTestPred<-predict(radialTrain$best.model,newdata=mcDataPCA[-trainIdx,])
+
+radialtmpVals<-summPreds(as.numeric(radialTestPred),as.numeric(mcDataPCA[-trainIdx,"more50"]))
+
+radialdfTmp<-rbind(radialdfTmp,radialtmpVals)
+}
+radialdfTmp<-data.frame(radialdfTmp)
+radialdfTmp<-cbind(radialdfTmp,type="radial")
+print(mean(radialdfTmp$err))
+print(mean(radialdfTmp$acc))
+print(mean(radialdfTmp$sens))
+print(mean(radialdfTmp$spec))
+```
+
+```{r}
+ggplot(radialdfTmp,aes(x=radialdfTmp$type,y=radialdfTmp$err))+geom_boxplot()
+```
+
+
+#Compare to the performance of other methods reported in the dataset description.
+Error Accuracy reported as follows, after removal of unknowns from
+| train/test sets):
+| C4.5 : 84.46+-0.30
+| Naive-Bayes: 83.88+-0.30
+| NBTree : 85.90+-0.28
+
+The mean accuracy of my model is 75.49483% which is less than the range of the dataset description's performance  
+
+#Polynomial
+
+```{r}
+#mcDataBkup<-mcData
+```
+
+```{r}
+#mcData<-mcData[sample(nrow(mcData),100),]
+```
+
+```{r poly}
+svm(income~.,data=mcData[,-(3:4)],kernel="polynomial",cost=0.1,gamma=0.5,coef0=1,degree=3)
+svm(income~.,data=mcData,kernel="polynomial",cost=1,gamma=0.5,coef0=1,degree=3)
+```
+
+
+
+```{r warning=FALSE}
+polydfTmp=NULL
+for(iTry in 1:10){
+trainIdx<-sample(nrow(mcData),nrow(mcData),replace=TRUE)
+trainD=mcData[trainIdx,]
+testD=mcData[-trainIdx,]
+
+polyTrain<-tune(svm,income~.,data=mcData[trainIdx,],kernel="polynomial",tunecontrol=tune.control(cross=5),ranges=list(cost=1:3,degree=2:4,coef0=c(0,0.5,1),gamma=c(0.2,0.5,1.0)))
+
+#rfTestPred<-predict(rfTrain,newdata=testD,type="response")>0.5
+polyTestPred<-predict(polyTrain$best.model,newdata=mcData[-trainIdx,])
+
+polytmpVals<-summPreds(as.numeric(polyTestPred),as.numeric(mcData[-trainIdx,"income"]))
+
+polydfTmp<-rbind(polydfTmp,polytmpVals)
+}
+polydfTmp<-data.frame(polydfTmp)
+polydfTmp<-cbind(polydfTmp,type="Poly")
+print(mean(polydfTmp$err))
+print(mean(polydfTmp$acc))
+print(mean(polydfTmp$sens))
+print(mean(polydfTmp$spec))
+```
+
+```{r}
+ggplot(polydfTmp,aes(x=polydfTmp$type,y=polydfTmp$err))+geom_boxplot()
+```
+
+#Compare to the performance of other methods reported in the dataset description.
+Error Accuracy reported as follows, after removal of unknowns from
+| train/test sets):
+| C4.5 : 84.46+-0.30
+| Naive-Bayes: 83.88+-0.30
+| NBTree : 85.90+-0.28
+
+The mean accuracy of my model is 79.89462% which is less than the range of the dataset description's performance  
+
+# Problem 5: compare logistic regression, random forest and SVM model performance (5 points)
+
+Compare performance of the models developed above (logistic regression, random forest, SVM) in terms of their accuracy, error and sensitivity/specificity.  Comment on differences and similarities between them.
+
+```{r}
+errordf=rbind(glmdfTmp,rfdfTmp,svmdfTmp,radialdfTmp,polydfTmp)
+
+
+ggplot(errordf,aes(x=factor(type),y=err))+ geom_boxplot()
+ggplot(errordf,aes(x=factor(type),y=acc))+ geom_boxplot()
+ggplot(errordf,aes(x=factor(type),y=sens))+ geom_boxplot()
+ggplot(errordf,aes(x=factor(type),y=spec))+ geom_boxplot()
+
+
+```
+ 
+About the differences: 
+-The linear regression does not consider all the attributes as the RF and SVM.  
+-The processing time taken by the linear regression is far less than the RF and the SVM. 
+
+About the similarities: They are generating comparable performances in terms of error, accuracy, sensitivity, and specificity.
+-Radial did not perform the best; on contrary, it performed the worest while RF performed the best
+
+# Extra 10 points: KNN model
+
+Develop KNN model for this data, evaluate its performance for different values of $k$ on different splits of the data into training and test and compare it to the performance of other methods reported in the dataset description.  Notice that this dataset includes many categorical variables as well as continuous attributes measured on different scales, so that the distance has to be defined to be meaningful (probably avoiding subtraction of the numerical values of multi-level factors directly or adding differences between untransformed age and capital gain/loss attributes).
+
+
+```{r knn}
+
+mcData$workclass<-as.numeric(mcData$workclass)
+mcData$education<-as.numeric(mcData$education)
+mcData$maritalStatus<-as.numeric(mcData$maritalStatus)
+mcData$occupation<-as.numeric(mcData$occupation)
+mcData$relationship<-as.numeric(mcData$relationship)
+mcData$race<-as.numeric(mcData$race)
+mcData$sex<-as.numeric(mcData$sex)
+mcData$nativeCountry<-as.numeric(mcData$nativeCountry)
+mcData$income<-as.numeric(mcData$income)
+mcData$income<-as.factor(mcData$income)
+
+
+```
+
+```{r}
+
+tune.knn(mcData[,-28],mcData$income,k=1:10)
+
+```
+
+
+```{r warning=FALSE}
+knndfTmp=NULL
+for(iTry in 1:10){
+trainIdx<-sample(nrow(mcData),nrow(mcData),replace=TRUE)
+trainD=mcData[trainIdx,]
+testD=mcData[-trainIdx,]
+
+knnTrain<-tune.knn(mcData[trainIdx,-ncol(mcData)],mcData[trainIdx,ncol(mcData)],k=1:10)
+
+#rfTestPred<-predict(rfTrain,newdata=testD,type="response")>0.5
+knnTestPred<-knn(mcData[trainIdx,-ncol(mcData)],mcData[-trainIdx,-ncol(mcData)],mcData[trainIdx,ncol(mcData)],k=knnTrain$best.parameters[,"k"])
+
+knntmpVals<-summPreds(as.numeric(knnTestPred),as.numeric(mcData[-trainIdx,"income"]))
+
+knndfTmp<-rbind(knndfTmp,knntmpVals)
+}
+knndfTmp<-data.frame(knndfTmp)
+knndfTmp<-cbind(knndfTmp,type="knn")
+print(mean(knndfTmp$err))
+print(mean(knndfTmp$acc))
+print(mean(knndfTmp$sens))
+print(mean(knndfTmp$spec))
+```
+
+```{r}
+ggplot(knndfTmp,aes(x=knndfTmp$type,y=knndfTmp$err))+geom_boxplot()
+```
+
+```{r}
+errordf=rbind(glmdfTmp,rfdfTmp,svmdfTmp,radialdfTmp,polydfTmp,knndfTmp)
+
+#errordf=rbind(svmdfTmp,radialdfTmp,polydfTmp,rfdfTmp,knndfTmp)
+#errordf=rbind(radialdfTmp,polydfTmp,knndfTmp)
+
+ggplot(errordf,aes(x=factor(type),y=err))+ geom_boxplot()
+```
+
+
+
+
+#Compare to the performance of other methods reported in the dataset description.
+Error Accuracy reported as follows, after removal of unknowns from
+| train/test sets):
+| C4.5 : 84.46+-0.30
+| Naive-Bayes: 83.88+-0.30
+| NBTree : 85.90+-0.28
+
+The mean accuracy of my model is 76.94359% which is less than the range of the dataset description's performance and the other methds in this exam! 
+
+
+# Extra 15 points: variable importance in SVM
+
+SVM does not appear to provide readily available tools for judging relative importance of different attributes in the model.  Please evaluate here an approach similar to that employed by random forest where importance of any given attribute is measured by the decrease in model performance upon randomization of the values for this attribute.
+
+As a reference to the follwing link:
+https://stats.stackexchange.com/questions/66239/variable-importance-for-svm-regression-and-averaged-neural-networks
+
+
+It can be done by evaluating attribute by attribute and compare them to the overall svm model and to teh performance of the other attributes. 
+
+It can be done by a for loop to train a model on all variables except that specific variable under study. Then collecting the performances for every missing attribute in a datafrme then ggplot them to evaluate the importance of the attributes compared to each other and to the model that has all the attributes.
+

@@ -1,0 +1,238 @@
+---
+title: "Engy Fouda Homework 3"
+output:
+  html_document: default
+  pdf_document: default
+  word_document: default
+---
+
+#Problem 1
+```{r setup, eval=TRUE,include=TRUE}
+library(ggplot2)
+library(ISLR)
+library(car)
+require(ggplot2)
+require(ISLR)
+require(car)
+knitr::opts_chunk$set(echo = TRUE)
+
+abaDat<-read.table("C:/Users/Engy/Downloads/Harvard/7th semester ISA/R/Week 2/abalone.data",sep=",");
+dim(abaDat)
+nrow(abaDat)
+ncol(abaDat)
+colnames(abaDat)<-c("Sex","Length","Diameter","Height","WholeWeight","ShuckedWeight","VisceraWeight","ShellWeight","Rings")
+abaDat$age <- abaDat$Rings+1.5
+summary(abaDat)
+summary(abaDat$age)
+```
+
+#Explaination
+**1. Calculate correlations between all *continuous* attributes in this dataset.  Given potential non-linear relationship between some of the attributes and snail age, it might be prudent to use both Pearson and Spearman correlations to determine which variable is most robustly correlated with age.**  
+```{r setup5, eval=TRUE,include=TRUE}
+cor(abaDat[,2:10],use="complete.obs")
+cor(abaDat[,2:10],use="complete.obs", method = "pearson")
+cor(abaDat[,2:10],use="complete.obs", method = "spearman")
+```
+The most robust variable correlated with age is Shell Weight because it has the higest correlation, pearson, and spearman correlation values.  
+
+Coorelation of the ShellWeight: 0.6275740  
+Pearson correlation value of the ShellWeight:  0.627574   
+Spearman correlation of the ShellWeight:0.6924746  
+
+**2. Fit linear model of age as outcome and shell weight as predictor using R function `lm`, display the result using `summary` function, use its output to answer the following questions:**  
+
+```{r setup6, eval=TRUE,include=TRUE}
+summary(lm(age~ShellWeight,abaDat))
+```
+   **+ Does this predictor explain significant amount of variability in response?  I.e. is there significant association between them?**  
+   Yes, there is a significance association between them because F-statistic:  2713 which is way larger than 1, and  p-value: < 2.2e-16 which is less than 0.05. Hence, both indicate that there is a relationship between the shell weight and the age.  
+   
+   **+ What is the RSE and $R^2$ of this model?  Remember, you can find them in the `summary` output or use `sigma` and `r.sq` slots in the result returned by `summary` instead**  
+Residual standard error: 2.51 on 4175 degrees of freedom  
+Multiple R-squared:  0.3938  
+
+   **+ What are the model coefficients and what would be their interpretation? What is the meaning of the intercept of the model, for example?  How sensible is it?**  
+   The model is:  
+   Y = b0 + b1 X (where b0 is the Intercept and b1 is the coefficicent)  
+   Which is: age= 7.96212 + 14.53568 * ShellWeight  
+ Interpretation of slope for each additional ShellWeight value, the age increases by an average of 14.54  
+Interpretation of the intercept, when the shell Weight = 0, the snail age will be 7.96 (May be the shell is missing)      
+Danger of extrapolation: if a ShellWeight value is outside of our data set, can't confidently predict the fitted age  
+
+**3. Create scatterplot of age and shell weight and add regression line from the model to the plot using `abline` function** 
+```{r setup7, eval=TRUE,include=TRUE}
+plot(abaDat$ShellWeight,abaDat$age,xlab="ShellWeight",ylab="age")
+abline(lm(age~ShellWeight,abaDat),col="red",lwd=2)
+#abline(lm(age~ShellWeight+0,abaDat),col="red",lwd=2)
+```
+
+**4. Create diagnostic plots of the model and comment on any irregularities that they present.  For instance, does plot of residuals vs. fitted values suggest presence of non-linearity that remained unexplained by the model?  How does it compare to the plot of the predictor and outcome with regression line added to it that was generated above?**  
+```{r setup8, eval=TRUE,include=TRUE}
+old.par <- par(mfrow=c(2,2))
+plot(lm(age~ShellWeight,abaDat))
+par(old.par)
+```
+There is a strong indication of non-linearity in the residuals vs fitted graph. There is no line in it, it is a curve, and it is not fitting teh data. It is going down leacing most of the data far above. There is a funnel shape indicating a heteroscedasticity which can be solved by log. The regression line in the residuals-fitted plot is not even a straight line, it is a curve which means that there is no linearity.The scatter plot is similar to the one generated above, but the regression line in the above plot is going  entirely in a direction different from the red curve plotted here.    
+The distribution 2 decays on the right slower, it reaches 75% quantile later than the distribution 1, so the QQ plot is above the diagonal.  
+The residuals vs leverage plot shows that many points are of high leverage.  
+
+**5. Use function `confint` to obtain confidence intervals on model parameters**  
+```{r setup9, eval=TRUE,include=TRUE}
+confint(lm(age~ShellWeight,abaDat))
+```
+confindence intervals at 2.5 % and 75.5% are:  
+for the Intercept coeff. (7.810869, 8.113365)    
+and for the ShellWeight coeff. (13.988525, 15.082825)  
+  
+They do not contain zero  
+
+
+**6. Use this model and `predict` function to make predictions for shell weight values of 0.1, 0.2 and 0.3. Use `confidence` and `prediction` settings for parameter `interval` in the call to `predict` to obtain confidence and prediction intervals on these model predictions.  Explain the differences between interpretation of:**  
+    **+ confidence intervals on model parameters and model predictions**  
+    **+ confidence and prediction intervals on model predictions**  
+    **+ Comment on whether confidence or predicion intervals (on predictions) are wider and why**  
+```{r setup10, eval=TRUE,include=TRUE}
+predict(lm(age~ShellWeight,abaDat),newdata=data.frame(ShellWeight=c(0.1, 0.2, 0.3)),interval='confidence')
+predict(lm(age~ShellWeight,abaDat),newdata=data.frame(ShellWeight=c(0.1, 0.2, 0.3)),interval='prediction')
+```
+Upon Dr. Victor's answer template in piazza:  
+a.The confidence intervals on model parameters (coefficients) of ShellWeight is (13.988525, 15.082825)  
+b. When the ShellWeight is 0.1, the confidence interval on model predictions is (9.308121, 9.523247)   
+When the ShellWeight is 0.2, the confidence interval on model predictions is (10.790188, 10.948315)  
+When the ShellWeight is 0.3, the confidence interval on model predictions is (12.239634, 12.406005)  
+c. When the ShellWeight is 0.1, the prediction interval is (4.492593, 14.33878)  
+When the ShellWeight is 0.2, the prediction interval is (5.946701, 15.79180)  
+When the ShellWeight is 0.3, the prediction interval is (7.400201, 17.24544)  
+  
+As read from the lab in the book page 111, 112:  
+For instance, the 95% confidence interval associated with a ShellWeight value of
+0.2 is (10.79,10.95), and the 95% prediction interval is (5.95,15.79). As
+expected, the confidence and prediction intervals are centered around the
+same point (a predicted value of 10.87 for age when ShellWeight equals 0.2), but
+the latter are substantially wider.  
+As the prediction is about an unknown, so it is safer to widen the intervals in order to have a good model. To indicate the interval where the outcome we are lookinf or might probably happen upon our historic data at hand. Moreover, we are taking studing samples not the whole population; hence, it is better to widen the interval.   
+"Prediction intervals must account for both the uncertainty in knowing the value of the population mean, plus data scatter. So a prediction interval is always wider than a confidence interval." (Reference: http://www.graphpad.com/support/faqid/1506/)   
+
+#Problem 2
+```{r setup2, eval=TRUE,include=TRUE}
+quantile(abaDat$age)
+quantile(log(abaDat$age))
+quantile(abaDat$ShellWeight)
+quantile(log(abaDat$ShellWeight))
+
+logabaDat<-log(abaDat[2:10])
+colnames(logabaDat)<-c("logLength","logDiameter","logHeight","logWholeWeight","logShuckedWeight","logVisceraWeight","logShellWeight","logRings","logage")
+
+cor(logabaDat[,1:9],use="complete.obs")
+cor(logabaDat[,1:9],use="complete.obs", method = "pearson")
+cor(logabaDat[,1:9],use="complete.obs", method = "spearman")
+```
+
+#Explaination
+
+ **1. Use `lm()` to fit a regression model of *log-transformed* age as linear function of *log-transformed* shell weight and use `summary` to evaluate its results.  Can we compare fits obtained from using untransformed (above) and log-transformed attributes?  Can we directly compare RSE from these two models?  What about comparing $R^2$?  What would we conclude from this? (Please consult ISLR Ch.3.1.3 if unsure)  What would be the physical meaning of model coefficients this time?  What does model intercept represent in this case, for example?  How sensible is this and how does it compare to that from the fit on untransformed data?** 
+ 
+```{r setup11, eval=TRUE,include=TRUE}
+ summary(lm(logage~logShellWeight,logabaDat))
+confint(lm(logage~logShellWeight,logabaDat))
+predict(lm(logage~logShellWeight,logabaDat),newdata=data.frame(logShellWeight=c(0.1, 0.2, 0.3)),interval='confidence')
+predict(lm(logage~logShellWeight,logabaDat),newdata=data.frame(logShellWeight=c(0.1, 0.2, 0.3)),interval='prediction')
+```
+ 
+ 
+<code><table><tr> untransformed vs. log-transformed  </tr>
+<tr>F-statistic:              2713     <         4657 </tr>  The F-statistic of the log-transorm model is higher than the untransformed indicating that it is a better model.  
+<tr>p-value:                  < 2.2e-16   =    < 2.2e-16 </tr>  
+Surprisingly that the p-value is the same for both the untrasfomed and the log-transormed.  
+<tr>Residual standard error:  2.51      >        0.1874  </tr> The error in the log-transform model is less than the untransformed indicating that it is a better model.  
+<tr>Multiple R-squared:       0.3938        <    0.5273  </tr>  The R-square is the measure of fit and indicates how good is the fit; the closer it is to 1 the better model.<br> In this example the R-square of the log-transform model is higher than the the untransformed indicating that it is a better<br> fit. Moreover, R-square characterizes the remaining unexplained variance in the data.<br> In this model the unexplained variance in the log-transorm model is less than that of the untrnaformed. <br>The untransformed is about 61% while in the log-trnsform model is 47%.  
+<tr>(Intercept):              7.96212           2.807031 </tr>
+<tr>ShellWeight:              14.53568          0.243920  </tr>
+<tr>corr.:                    0.6275740    <     0.7261587  </tr>
+<tr>Pearson:                  0.627574     <    0.7261587  </tr>
+<tr>spearman:                 0.6924746    =   0.6924746 </tr>
+The correlation and the pearson coorelation are higher in the log-transform model than the untransformed one. </table></code>
+The model is:  
+   Y = b0 + b1 X (where b0 is the Intercept and b1 is the coefficicent)  
+   Which is: logage= 2.7940094 + 0.2369129 * logShellWeight  
+ Interpretation of slope for each additional logShellWeight value, the logage increases by an average of 0.24   
+Interpretation of the intercept, when the logShellWeight = 0, the snail logage will be 2.79 (May be the shell is missing)      
+This log-transform fit is much better than the untransformed one.  
+  
+a.The confidence intervals on model parameters (coefficients) of logShellWeight is (0.2369129, 0.2509275) which is much lower than the untranssform model which is:(13.988525, 15.082825)  
+b. When the logShellWeight is 0.1, the confidence interval on model predictions is (2.817768,  2.845079). Again much less than the untransform model which is:(9.308121, 9.523247)   
+When the logShellWeight is 0.2, the confidence interval on model predictions is (2.841519, 2.870111). Again less than (10.790188, 10.948315)  
+When the logShellWeight is 0.3, the confidence interval on model predictions is (2.865266, 2.895148). Again  less than (12.239634, 12.406005)  
+All the intervals here are around 2.8.  
+c. When the logShellWeight is 0.1, the prediction interval is (2.463710, 3.199136)  
+When the logShellWeight is 0.2, the prediction interval is (2.488078, 3.223552)    
+When the logShellWeight is 0.3, the prediction interval is (2.512445, 3.247970)  
+  
+As read from the lab in the book page 111, 112:  
+For instance, the 95% confidence interval associated with a logShellWeight value of
+0.2 is (2.84, 2.87), and the 95% prediction interval is (2.49, 3.22). As
+expected, the confidence and prediction intervals are centered around the
+same point (a predicted value of 2.86 for logage when logShellWeight equals 0.2), but
+the latter are substantially wider.  
+The preidiction interval is wider than the confidence interval; nevertheless, it is small range which indicated more percise prediction than the untransform model.  
+
+**2. Create a XY-scatterplot of log-transformed predictor and response and add corresponding regression line to it.  Compared it to the same plot but in untransformed coordinates obtained above.  What would you conclude from such comparison?**   
+```{r setup12, eval=TRUE,include=TRUE}
+ plot(logabaDat$logShellWeight,logabaDat$logage,xlab="Log ShellWeight",ylab="Log age")
+abline(lm(logage~logShellWeight,logabaDat),col="red",lwd=2)
+```
+
+By comparing the two plots, the log-transformed plot indicates much better fit to the data than the untransformed model. The data looks more linear than the untransformed model. Albeit, there is still a funnel shape, it does not look as horrible as the untranformed model.Moreover, the line fits the data.  
+
+**3.Make diagnostic plots for model fit on log-transformed age and shell weight. Compare their appearance to that for the model using original scale of measurements. What would you conclude from this comparison about their relative quality?**
+```{r setup13, eval=TRUE,include=TRUE}
+old.par <- par(mfrow=c(2,2))
+plot(lm(logage~logShellWeight,logabaDat))
+par(old.par)
+
+```
+
+The diagnostics plot differed a lot form the untransformed model to the log-transform model.
+The residuals vs fitted again has a straighter a curve close to be a straight line. It fits the data much better, almost in the middle. The difference between the data portion above and under it is not that big.   
+Still as the untransform model, the distribution 2 decays on the right slower, it reaches 75% quantile later than the distribution 1, so the QQ plot is above the diagonal.  
+However, the difference is huge; the line fits the data much better. the data that is far from the line is closer than than the untransform model. Teh data that does not fit the line is less than teh untransfrm model.  
+The residuals vs leverage looks much better than the untransform model. In fact, this plot in teh untransform model looks horrible with too many ouliers every where. In the log-transform model, the fitted line is slightly a curve, fits the data much better, and divides the data in middle. Not that significant outliers except that very far outlier that is marked as 237; hence, the far points mostly of low leverage.  
+The scale-loction is entirely inversed from far left in teh untranform model to far right in the log-trnasform model. The data points spread over a larger area than the transform model.  
+
+
+#Problem 3
+
+#Explaination
+
+**To explore effects of adding another variable to the model, continue using log-transformed attributes and fit a model of log-transformed age as a function of shell weight and shucked weight (both log-transformed also).  Just an additive model -- no interaction term is necessary at this point. Please obtain and evaluate the summary of this model fit, confidence intervals on its parameters and its diagnostic plots. Where applicable, compare them to the model obtained above and reflect on pros and cons of including shucked weight as another variable into the model.**  
+```{r setup3, eval=TRUE,include=TRUE}
+lm.fit =lm(logage~logShellWeight+logShuckedWeight,logabaDat )
+
+summary (lm.fit)
+vif(lm.fit)
+old.par <- par(mfrow=c(2,2))
+plot(lm(logage~logShellWeight+logShuckedWeight,logabaDat ))
+par(old.par)
+
+confint(lm(logage~logShellWeight+logShuckedWeight,logabaDat))
+predict(lm(logage~logShellWeight+logShuckedWeight,logabaDat),newdata=data.frame(logShellWeight=c(0.1, 0.2, 0.3),logShuckedWeight=c(0.1, 0.2, 0.3)),interval='confidence')
+#predict(lm(logage~logShellWeight+logShuckedWeight,logabaDat),newdata=data.frame(logShellWeight=c(0.1, 0.2, 0.3),logShuckedWeight=c(0.1, 0.2, 0.3)),interval='prediction')
+```
+The model is:  
+logage= 2.926705 + 0.544297 (logShellWeight) - 0.296300 (logShuckedWeight)  
+Interpretation of slope for each additional logShellWeight value, the logage increases by an average of 0.54 regardless of the value of logShuckedWeight and holding the logShuckedWeight constant, and simialrly any unit increase in the logShuckedWeight means decrease in the logage by 0.3 regardless the value of logShellWeight while holding the logShellWeight constant.    
+Interpretation of the intercept, when the logShellWeight and logShuckedWeight both equal to zero, the snail logage will be 2.92.  
+  
+This model is worse than the model of problem 2.  
+  
+The confidence interval of logShellWeight is (0.5225392, 0.5660546)  
+The confidence interval of logShuckedWeight is (-0.3168073, -0.2757926)  
+
+The t-test of the coeficients of the intercept is 395.14, and the logShellWeight is  49.05, and the logShuckedWeight is  -28.33. The higher the t-test the more association the predicator. In this example the logShuckedWeight is negative value indicating that it is a bad predictor in this model.  
+  
+Surprisingly, the R-square in the additive model is higher than the log-square model; however the vif function that is used for variance inflation shows that logShuckedWeight and logShellWeight are the same.  
+
+The residuals vs fitted again shows unlinearity and there is no straight line fitting the model, and the funnel shape is back.  
+The residuals vs leverage shows that the most of the points are located so close to each other and have high leverage.    
+The distribution 2 decays on the right slower, it reaches 75% quantile later than the distribution 1, so the QQ plot is above the diagonal.  
+The residuals vs leverage plot shows that many points are of high leverage.    

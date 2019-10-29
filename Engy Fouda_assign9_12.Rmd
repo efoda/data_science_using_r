@@ -1,0 +1,282 @@
+---
+title: "Engy Fouda CSCI E-63C Week 9 assignment"
+output:
+  html_document:
+    toc: false
+---
+```{r setup, include=FALSE}
+library(ISLR)
+library(MASS)
+library(class)
+library(e1071)
+library(ggplot2)
+library(reshape2)
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Preface
+
+For this assignment we will use banknote authentication data (the one we worked with in week 2 assignment) to fit logistics regression model and evaluate performance of LDA, QDA and KNN classifiers.  As we have seen earlier this dataset should allow to predict which banknotes are authentic and which ones are forged fairly well, so we should expect to see low error rates for our classifiers.  Let's see whether some of those tools perform better than others on this data.
+
+```{r}
+bankDat <- read.table("C:/Users/Engy/Downloads/Harvard/7th semester ISA/R/Week 9/data_banknote_authentication.txt",sep=",")
+colnames(bankDat)<-c("variance","skewness","curtosis","entropy","classInt")
+```
+
+Disclaimer: I followed ISLR, the lecture slides code, and the section code to solve this assignment  
+
+# Problem 1 (10 points): logistic regression
+
+Fit logistic regression model of the class attribute using remaining four attributes as predictors in the model.  Produce summary of the model, describe which attributes appear to be significantly associated with the categorical outcome in this model.  Use this model to make predictions on the entire dataset and compare these predictions and corresponding true values of the class attribute using confusion matrix (i.e. contingency table).  Calculate error rate (would this be training or test error in this case?), sensitivity and specificity (assuming that we are predicting class "1").  Describe the results.
+
+```{r}
+glm.fits=glm(classInt~variance+skewness+curtosis+entropy,data=bankDat,family=binomial)
+summary(glm.fits)
+coef(glm.fits)
+summary(glm.fits)$coef
+```
+
+
+
+all of them seem to be associated with the categorical outcome in this model as they are all less than 0.05 cut off.  
+
+
+```{r}
+glm.probs=predict(glm.fits)
+#glm.probs[1:10]
+glm.pred = ifelse(glm.probs>0.5,"1","0")
+table(Prediction=glm.pred,bankDat$classInt)
+
+```
+
+```{r}
+assess.prediction=function(truth,predicted) {
+   predicted = predicted[ ! is.na(truth) ]
+  truth = truth[ ! is.na(truth) ]
+  truth = truth[ ! is.na(predicted) ]
+  predicted = predicted[ ! is.na(predicted) ]
+  
+  # how predictions align against known # training/testing outcomes:
+  # TP/FP= true/false positives,
+  # TN/FN=true/false negatives
+  TP = sum(truth==1 & predicted==1)
+  TN = sum(truth==0 & predicted==0)
+  FP = sum(truth==0 & predicted==1)
+  FN = sum(truth==1 & predicted==0)
+  P = TP+FN # total number of positives in the truth data
+  N = FP+TN  # total number of negatives
+
+  accuracy <- signif(sum(truth==predicted)*100/length(truth), 3)
+  errorRate <- 100-accuracy
+  TPR <- signif(100*TP/P, 3)
+  TNR <- signif(100*TN/N, 3)
+  PPV <- signif(100*TP/(TP+FP), 3)
+  FDR <- signif(100*FP/(TP+FP), 3)
+  FPR <- signif(100*FP/N, 3)
+  
+  sensitivity = TPR
+  specificity = TNR
+  return(
+    data.frame(
+      accuracy,
+      errorRate,
+      sensitivity,
+      specificity,
+      PPV,
+      FDR,
+      FPR
+    )
+  )
+}
+assess.prediction(bankDat$classInt,glm.pred)
+```
+
+Predicting that class 1 is of accuracy 99.1% and the sensitivity is of 98.7$ and specificty of 99.3%  
+
+# Problem 2 (10 points): LDA and QDA
+
+Using LDA and QDA implementations available in the package `MASS`, calculate confusion matrix, (training) error rate, sensitivity and specificity for each of them.  Compare them to those of logistic regression.  Describe the results.
+
+```{r}
+
+lda.fit=lda(classInt~variance+skewness+curtosis+entropy,data=bankDat)
+lda.fit
+#plot(lda.fit)
+lda.pred=predict(lda.fit, bankDat)
+class(lda.pred)
+data.frame(lda.pred)[1:5,]
+table(lda.pred$class,bankDat$classInt==1)
+mean(lda.pred$class,bankDat$classInt)
+assess.prediction(bankDat$classInt,ifelse(lda.pred$posterior[,2]>0.5,1,0))
+```
+
+LR:
+  accuracy errorRate sensitivity specificity  PPV   FDR   FPR
+ 1     99.1       0.9        98.7        99.3 99.2 0.824 0.656
+ 
+LDA:
+   accuracy errorRate sensitivity specificity PPV  FDR FPR
+ 1     97.7       2.3         100        95.8  95 4.98 4.2
+ 
+ LDA is less accuracy that the LR and higher error rate, which indicates that a model with linear decision boundary logistic regression without higher-order terms  gets the boundary right 
+
+```{r}
+
+qda.fit=qda(classInt~variance+skewness+curtosis+entropy,data=bankDat)
+qda.fit
+#plot(qda.fit)
+qda.pred=predict(qda.fit, bankDat)
+#class(qda.pred)
+#data.frame(qda.pred)[1:5,]
+table(data.frame(qda.pred)$class,bankDat$classInt==1)
+#mean(qda.pred$class,bankDat$classInt)
+assess.prediction(bankDat$classInt,ifelse(qda.pred$posterior[,2]>0.5,1,0))
+```
+
+LR:
+  accuracy errorRate sensitivity specificity  PPV   FDR   FPR
+ 1     99.1       0.9        98.7        99.3 99.2 0.824 0.656
+ 
+LDA:
+   accuracy errorRate sensitivity specificity PPV  FDR FPR
+ 1     97.7       2.3         100        95.8  95 4.98 4.2
+ 
+ qda gets a higher accuracy than the lda but less than the LR, which indicates that nothing changes and my interpretation is still consistent that a model with linear decision boundary logistic regression without higher-order terms  gets the boundary right 
+
+# Problem 3 (10 points): KNN
+
+Using `knn` from library `class`, calculate confusion matrix, (training) error rate, sensitivity/specificity for  one and ten nearest neighbors models.  Compare them to corresponding results from LDA, QDA and logistic regression. Describe results of this comparison -- discuss whether it is surprising to see low *training* error for KNN classifier with $k=1$.
+
+```{r}
+knn.pred1 = knn(train = bankDat[,1:4], test = bankDat[,1:4],cl=bankDat$classInt, k=1)
+assess.prediction(bankDat$classInt,knn.pred1)
+table(true = ifelse(bankDat$classInt == 0, 0, 1), predicted = ifelse(knn.pred1 == 0, 1, 0))
+
+knn.pred1 = knn(train = bankDat[,1:4], test = bankDat[,1:4],cl=bankDat$classInt, k=10)
+assess.prediction(bankDat$classInt,knn.pred1)
+table(true = ifelse(bankDat$classInt == 0, 0, 1), predicted = ifelse(knn.pred1 == 0, 1, 0))
+
+```
+
+The accuracy is 100% with zero error rate, which indicates that KNN is capable of capturing that boundary  
+ys, it is surprising to me, and I am worried that it is overfitting  
+
+# Problem 4 (30 points): compare test errors of logistic regression, LDA, QDA and KNN
+
+Using resampling approach of your choice (e.g. cross-validation, bootstrap, etc.) obtain test error as well as sensitivity and specificity for each of these methods (logistic regression, LDA, QDA, KNN with $k=1,2,5,10,20,50,100$).  Present results in the form of boxplots, compare test error/sensitivity/specificity across these methods and discuss their relative performance.
+
+```{r}
+df<-NULL
+lda.df<-NULL
+qda.df<-NULL
+trainData<-matrix(nrow=0,ncol=3)
+testData<-matrix(nrow=0,ncol=3)
+lda.trainData<-matrix(nrow=0,ncol=3)
+lda.testData<-matrix(nrow=0,ncol=3)
+qda.trainData<-matrix(nrow=0,ncol=3)
+qda.testData<-matrix(nrow=0,ncol=3)
+
+for ( iTry in 1:10 ) {
+  trainIdx <- sample(nrow(bankDat),nrow(bankDat),replace=TRUE)
+  wTrain <- bankDat[trainIdx,]
+  wTest <- bankDat[-trainIdx,]
+  glmTry <- glm(classInt~variance+skewness+curtosis+entropy,data=wTrain,family=binomial)
+  ldaTry <- lda(classInt~variance+skewness+curtosis+entropy,data=wTrain)
+  qdaTry <- qda(classInt~variance+skewness+curtosis+entropy,data=wTrain)
+  
+  glm.Test <- as.numeric(predict(glmTry,newdata=wTest,type="response")>0.5)
+  glm.Train <- as.numeric(predict(glmTry,newdata=wTrain,type="response")>0.5)
+  trainData <- rbind(trainData, assess.prediction(wTrain$classInt, glm.Train))
+  testData <- rbind(testData, assess.prediction(wTest$classInt, glm.Test))
+  df <- rbind(data.frame(type="glm", sensitivity=c(testData[,"sensitivity"], trainData[,"sensitivity"]),  specificity=c(testData[,"specificity"], trainData[,"specificity"]), error=c(testData[,"errorRate"], trainData[,"errorRate"]) , trainTest=c("test","train")))
+  
+  lda.Test <- predict(ldaTry,newdata=wTest)$class
+  lda.Train<- predict(ldaTry,newdata=wTrain)$class
+  lda.trainData <- rbind(lda.trainData, assess.prediction(wTrain$classInt, lda.Train))
+  lda.testData <- rbind(lda.testData, assess.prediction(wTest$classInt, lda.Test))
+  lda.df <- rbind(data.frame(type="lda", sensitivity=c(lda.testData[,"sensitivity"], lda.trainData[,"sensitivity"]),  specificity=c(lda.testData[,"specificity"], lda.trainData[,"specificity"]), error=c(lda.testData[,"errorRate"], lda.trainData[,"errorRate"]) , trainTest=c("test","train")))
+  
+  qda.Test <- predict(qdaTry,newdata=wTest)$class
+  qda.Train<- predict(qdaTry,newdata=wTrain)$class
+  qda.trainData <- rbind(qda.trainData, assess.prediction(wTrain$classInt, qda.Train))
+  qda.testData <- rbind(qda.testData, assess.prediction(wTest$classInt, qda.Test))
+  qda.df <- rbind(data.frame(type="qda", sensitivity=c(qda.testData[,"sensitivity"], qda.trainData[,"sensitivity"]),  specificity=c(qda.testData[,"specificity"], qda.trainData[,"specificity"]), error=c(qda.testData[,"errorRate"], qda.trainData[,"errorRate"]) , trainTest=c("test","train")))
+  
+}
+
+#ggplot(df,aes(x=glm,y=error, colour=trainTest))+ geom_boxplot() 
+
+df1 = NULL
+for ( iTry in 1:10 ) {
+    trainIdx <- sample(nrow(bankDat),nrow(bankDat)/2, replace = TRUE)
+    trainD = bankDat[trainIdx,]
+    testD = bankDat[-trainIdx,]
+    
+    
+    for(k in c(1,2,5,10,20,50,100)) {
+      knn.train.pred = knn(train=trainD,test=trainD,cl=trainD$classInt,k=k)
+      knn.test.pred = knn(train=testD,test=testD,cl=testD$classInt,k=k)
+      
+      trainData <- rbind(trainData, assess.prediction(trainD$classInt, knn.train.pred))
+      testData <- rbind(testData, assess.prediction(testD$classInt, knn.test.pred))
+      
+      df1 <- rbind(df1,data.frame(type=paste0("KNN-",k), sensitivity=c(testData[,"sensitivity"], trainData[,"sensitivity"]),  specificity=c(testData[,"specificity"], trainData[,"specificity"]), error=c(testData[,"errorRate"], trainData[,"errorRate"]) , trainTest=c("test","train")))
+  }
+}
+
+df2<-rbind(df,lda.df,qda.df,df1)
+ggplot(df2,aes(x=type,y=sensitivity, colour=trainTest))+ geom_boxplot()
+ggplot(df2,aes(x=type,y=specificity, colour=trainTest))+ geom_boxplot()
+ggplot(df2,aes(x=type,y=error, colour=trainTest))+ geom_boxplot() 
+
+```
+
+Following Andrey's interpretation on piazza:
+
+The dataset Is highly separable and the separation was quite good
+
+Furthermore, the results are consistent in that even LDA does a decent job on this dataset, and so does logistic regression (with only first order terms thus also linear decision boundary), and QDA is even better. 
+
+All models give you accuracy upward f 90%, which is pretty impressive. 
+
+So the interpretation is as follows (I think): the data ARE indeed truly separable (or at least VERY highly separable) ; however the surface that separates the two cases is not quite a (hyper-)plane, but has a more complex shape. Hence, models with linear decision boundary (LDA, logistic regression without higher-order terms) can not get the boundary right (although still have very good performance, so the boundary is *almost* flat apparently); QDA performs better, and KNN is capable of capturing that boundary 
+
+
+
+# Extra 10 points problem: naive Bayes classifier
+
+Fit naive Bayes classifier (see lecture slides for examples of using `naiveBayes` function from package `e1071`) on banknote authentication dataset and assess its performance on test data by resampling along with logistic regression, LDA, QDA and KNN in Problem 4 above.  In other words, add naive Bayes to the rest of the methods evaluated above. 
+
+```{r}
+trainData<-matrix(nrow=0,ncol=3)
+testData<-matrix(nrow=0,ncol=3)
+nb.df<-Null
+
+for ( iTry in 1:10 ) {
+  trainIdx <- sample(nrow(bankDat),nrow(bankDat)/2,replace=TRUE)
+  wTrain <- bankDat[trainIdx,]
+  wTest <- bankDat[-trainIdx,]
+  nbFitTrain <- naiveBayes(classInt~variance+skewness+curtosis+entropy,data=wTrain)
+  nb.Train = predict(nbFitTrain,wTrain,type = "raw")
+  nb.Test = predict(nbFitTrain,wTest,type = "raw")
+
+  trainData <- rbind(trainData, assess.prediction(wTrain$classInt, nb.Train))
+  testData <- rbind(testData, assess.prediction(wTest$classInt, nb.Test))
+
+nb.df <- rbind(data.frame(type="NB", sensitivity=c(testData[,"sensitivity"], trainData[,"sensitivity"]),  specificity=c(testData[,"specificity"], trainData[,"specificity"]), error=c(testData[,"errorRate"], trainData[,"errorRate"]) , trainTest=c("test","train")))
+
+  
+
+  }
+df2<-rbind(df2,nb.df)
+ggplot(df2,aes(x=type,y=sensitivity, colour=trainTest))+ geom_boxplot()
+df2<-rbind(df,lda.df,qda.df,df1,nb.df)
+ggplot(df2,aes(x=type,y=sensitivity, colour=trainTest))+ geom_boxplot()
+ggplot(df2,aes(x=type,y=specificity, colour=trainTest))+ geom_boxplot()
+ggplot(df2,aes(x=type,y=error, colour=trainTest))+ geom_boxplot() 
+
+```
+
+I really tried all the possible modifications; however, I don't know why assess.prediction(wTrain$classInt, nb.Train) and assess.prediction(wTest$classInt, nb.Test) give NA & NaN though nb.Train and nb.Test have values and are not Null  
+I really did my best!  
+

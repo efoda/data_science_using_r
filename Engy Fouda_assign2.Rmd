@@ -1,0 +1,171 @@
+---
+title: "Engy Fouda Homework 2"
+output:
+  html_document: default
+  word_document: default
+---
+
+#Problem 1
+```{r setup, eval=TRUE,include=TRUE}
+bankDat<-read.table("data_banknote_authentication.csv",sep=",");
+#habDat <- read.table("haberman.data",sep=",")
+#1. variance of Wavelet Transformed image (continuous) 
+#2. skewness of Wavelet Transformed image (continuous) 
+#3. curtosis of Wavelet Transformed image (continuous) 
+#4. entropy of image (continuous) 
+#5. class (integer) 
+dim(bankDat)
+nrow(bankDat)
+ncol(bankDat)
+colnames(bankDat)<-c("variance","skewness","curtosis","entropy","classInt")
+summary(bankDat)
+summary(bankDat$classInt)
+#gg <- factor(bankDat$classInt)
+#bankDat$classInt <- c("genuine","fake")[bankDat$classInt]
+cor(bankDat$variance,bankDat$classInt)
+cor(bankDat$skewness,bankDat$classInt)
+cor(bankDat$curtosis,bankDat$classInt)
+cor(bankDat$entropy,bankDat$classInt)
+plot(bankDat$variance,bankDat$classInt)
+plot(bankDat$skewness,bankDat$classInt)
+plot(bankDat$curtosis,bankDat$classInt)
+plot(bankDat$entropy,bankDat$classInt)
+
+bankDat$classInt <- factor(bankDat$classInt)
+
+summary(bankDat$classInt)
+library(ggplot2)
+require(ggplot2)
+ggplot(bankDat,aes(x=variance,y=skewness,colour=classInt,shape=classInt)) + geom_point() + facet_wrap(~classInt)
+ggplot(bankDat,aes(x=variance,y=curtosis,colour=classInt,shape=classInt)) + geom_point() + facet_wrap(~classInt)
+ggplot(bankDat,aes(x=skewness,y=curtosis,colour=classInt,shape=classInt)) + geom_point() + facet_wrap(~classInt)
+ggplot(bankDat,aes(x=variance,y=entropy,colour=classInt,shape=classInt)) + geom_point() + facet_wrap(~classInt)
+ggplot(bankDat,aes(x=skewness,y=entropy,colour=classInt,shape=classInt)) + geom_point() + facet_wrap(~classInt)
+ggplot(bankDat,aes(x=curtosis,y=entropy,colour=classInt,shape=classInt)) + geom_point() + facet_wrap(~classInt)
+ggplot(bankDat,aes(x=skewness,y=variance,colour=classInt,shape=classInt)) + geom_point() + facet_wrap(~classInt)
+ggplot(bankDat,aes(x=curtosis,y=variance,colour=classInt,shape=classInt)) + geom_point() + facet_wrap(~classInt)
+ggplot(bankDat,aes(x=entropy,y=variance,colour=classInt,shape=classInt)) + geom_point() + facet_wrap(~classInt)
+
+#Another plot using ggpaair
+require(GGally)
+ggpairs(data=bankDat,columns=1:4, mapping=ggplot2::aes(colour = classInt))
+
+bankDat$curtosis0 <- bankDat$curtosis==0
+table(bankDat[, c("classInt","curtosis0")])
+bankDat$curtosis75 <- bankDat$curtosis>=quantile(bankDat$curtosis,probs=0.75)
+table(bankDat[, c("classInt","curtosis75")])
+
+bankDat$variance0 <- bankDat$variance==0
+table(bankDat[, c("classInt","variance0")])
+bankDat$variance75 <- bankDat$variance>=quantile(bankDat$variance,probs=0.75)
+table(bankDat[, c("classInt","variance75")])
+
+bankDat$skewness0 <- bankDat$skewness==0
+table(bankDat[, c("classInt","skewness0")])
+bankDat$skewness75 <- bankDat$skewness>=quantile(bankDat$skewness,probs=0.75)
+table(bankDat[, c("classInt","skewness75")])
+
+bankDat$entropy0 <- bankDat$entropy==0
+table(bankDat[, c("classInt","entropy0")])
+bankDat$entropy75 <- bankDat$entropy>=quantile(bankDat$entropy,probs=0.75)
+table(bankDat[, c("classInt","entropy75")])
+```
+
+#Explaination
+**1.  Determine number of variables (explain which ones are predictors and which one is outcome) **  
+Predictors: variance, skewness, curtosis, entropy  
+Outcome: class  
+
+**2.  Describe your observations **  
+By assuming that class 0 is genuine and class 1 is fake:  
+-The larger the skewness the larger the genuine.  
+-The larger the curtosis, the larger the fake.If the curtosis value is higher than 9, the money is always fake (class 1). This is the case in all the curtosis plots.     
+-The entropy is not a good indicator, the larger the entropy, both classes are high.The entropy is the worst indicator as class 0 and class 1 plots look so similar; hence, if an entropy value is provided, I can't predict if the money is genuine or fake.  
+-The larger the variance the larger the genuine money. Intersting that the 75th quantile of  variance as true for fake class is zero.The overlap area between class 0 and 1 in the Variance is [-2.7,2.3]. If the variance is smaller than -2.7, then the outcome is class 1 (fake money). If the variance is more than 2.3, the outcome is class 0 (genuine money).  
+
+**3.  Discuss which of the variables are more likely to be informative with respect to discriminating forged bank notes from genuine.**
+According to the correlation values and the plots, the best is the Variance and the worest is Entropy.  
+
+**4.  Please comment on whether given the data at hand such problem appears to be an easy or hard one to solve. **  
+Easy  
+
+**5.	Try to guess using your best intuition, what could be an error in discriminating forged banknotes from genuine in this dataset: 50%, 20%, 10%, 5%, 2%, less than that? **  
+	I guess it is about 50% because the correlation of the predictor and the class is not that high.
+	
+**6.	Also, please discuss some of the tradeoffs that might be associated with that. For instance, should one expect the cost of calling genuine note counterfeit to be the same as making the opposite call (allowing fake bills as authentic). **  
+Typically, as the flexibility increases, the variance increases, and its bias decreases. 
+I think yes, it'll will Type I error and type II error for a two-tailed hypothesis testing.   By assuming that the null is genuine, and the alternative is not genuine; then, will need to calculate the p-value.  
+Type I error: the money is genuine while the model rejects the null hypothesis and results that the money is fake.  
+  
+Type II error: the money is fake while the model accepts it and results that the money is genuine.  
+If the error is 50%, then the two cases is similar and will cause about 50% loss.  
+
+If assumed that the error is 20% with considering the two error types:  
+- a bank used a statistical model that on average mis-classifies 20% of the notes as forged while they are actually genuine notes.  
+- a bank used a statistical model that on average mis-classifies 20% of the notes as genuine notes while they are forged. (This case is better than the previous becuase it indicates that)  
+
+**8.	Consider also anticipated frequency of these cases in the practical settings and how it could potentially interact with these costs.**  
+If the error is indeed 50%; then this system won't be highly effective in detecting the genuine money from the fake money.  
+I think the cost will large! It will be miss!  
+Genuine money detected as fake and vice versa; this is not reliable.  
+The error margine in any money-realted ystem has to be perfect.    
+
+#Problem 2
+```{r setup1, eval=TRUE,include=TRUE}
+abaDat<-read.table("abalone.data",sep=",");
+dim(abaDat)
+nrow(abaDat)
+ncol(abaDat)
+colnames(abaDat)<-c("Sex","Length","Diameter","Height","WholeWeight","ShuckedWeight","VisceraWeight","ShellWeight","Rings")
+#abaDat$age <- abaDat$rings+1.5
+summary(abaDat)
+summary(abaDat$Rings)
+cor(abaDat$Length,abaDat$Rings)
+cor(abaDat$WholeWeight,abaDat$Rings)
+cor(abaDat$Diameter,abaDat$Rings)
+cor(abaDat$Height,abaDat$Rings)
+cor(abaDat$ShellWeight,abaDat$Rings)
+cor(abaDat$ShuckedWeight,abaDat$Rings)
+cor(abaDat$VisceraWeight,abaDat$Rings)
+plot(abaDat$Length,abaDat$Rings)
+ plot(abaDat$Diameter,abaDat$Rings)
+ plot(abaDat$Height,abaDat$Rings)
+ plot(abaDat$WholeWeight,abaDat$Rings)
+ plot(abaDat$ShuckedWeight,abaDat$Rings)
+ plot(abaDat$VisceraWeight,abaDat$Rings)
+ plot(abaDat$ShellWeight,abaDat$Rings)
+ plot(abaDat$Sex,abaDat$Rings)
+library(ggplot2)
+library(GGally)
+require(GGally)
+ggpairs(data=abaDat,columns=1:9, mapping=ggplot2::aes(colour = Sex))
+ggplot(abaDat,aes(x=Length,y=Rings,colour=Sex,shape=Sex)) + geom_point() + facet_wrap(~Sex)
+ggplot(abaDat,aes(x=Diameter,y=Rings,colour=Sex,shape=Sex)) + geom_point() + facet_wrap(~Sex)
+ggplot(abaDat,aes(x=Height,y=Rings,colour=Sex,shape=Sex)) + geom_point() + facet_wrap(~Sex)
+ggplot(abaDat,aes(x=WholeWeight,y=Rings,colour=Sex,shape=Sex)) + geom_point() + facet_wrap(~Sex)
+ggplot(abaDat,aes(x=ShuckedWeight,y=Rings,colour=Sex,shape=Sex)) + geom_point() + facet_wrap(~Sex)
+ggplot(abaDat,aes(x=VisceraWeight,y=Rings,colour=Sex,shape=Sex)) + geom_point() + facet_wrap(~Sex)
+ggplot(abaDat,aes(x=ShellWeight,y=Rings,colour=Sex,shape=Sex)) + geom_point() + facet_wrap(~Sex)
+
+```
+
+#Explaination
+
+ **1. Determine number of variables (explain which ones are predictors -- categorical vs. continuous -- and which one is the outcome) **  
+ Continuous Predictors are:Length,Diameter,Height,WholeWeight,ShuckedWeight,VisceaWeight,ShellWeight  
+Categorical Predictors:Sex  
+     
+ Outcome: Rings  
+   
+ **2.Describe your observations and discuss which attributes might be more useful for predicting snail age.**  
+ Upon the results of the correlation between the predictors and the age, the highest coorelation is the Shell Weight, it is the best indicator to predict the rings, and consequently the age. Then the Diameter, then the Length, then the Whole weight. The Viscer and schucked weights are not good indicators.  
+From the plots, it seems that there is a linear relation between the length, diameter, height with the rings. While the shucked weight, whole weight, viscer weight, and shell weight do not have such linear realtionship.  
+I understood from the piazza comments, that we do not need to make predictability, and it is just inference. Hence, for inference, I just thought about a simple model of linearity between the predictors and the outcome which is more restricted but more interpretable. 
+  
+For further examination, when examine the XY-plots for every factor (female, male, infant), will find that the difference between each factor is little.  
+Suprisingly, the maximum rings for the infant are 21 which is 22.5 years old, while the maximum rings for the female are 29 which is 30.5 years old and in male are about 27 which equals 28.5. Hence, the snails life as adults is at most 8 years for females and 6 years for males.  
+All the weight graphs follows a pattern, they show that the realtion between the rings and the different weights is non-linear, but more like vertical sin-wave.  
+I think that this data gathering has repititive data which causes having a huge common area between the Infant and the other categories where they should be exculsive.  
+
+**3.Extra 5 points: for some of the continuous and categorical predictors generate boxplots rendering relationship between them.**  
+Done, please refer to the plot above.
